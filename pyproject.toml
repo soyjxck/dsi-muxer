@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "dsi-muxer"
+version = "1.0.0"
+description = "Racjin PS2 DSI container multiplexer/demultiplexer"
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.8"
+authors = [{name = "soyjxck"}]
+keywords = ["ps2", "racjin", "dsi", "mpeg2", "muxer", "demuxer", "fullmetal-alchemist"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Topic :: Multimedia :: Video",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+]
+
+[project.scripts]
+dsi-muxer = "dsi_muxer.__main__:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
