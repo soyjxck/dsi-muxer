@@ -240,7 +240,32 @@ class DSI:
             vid_pos += vid_cap
             aud_pos += aud_sz
 
-        return cls(blocks, block_size)
+        dsi = cls(blocks, block_size)
+        dsi.ensure_end_of_sequence()
+        return dsi
+
+    def ensure_end_of_sequence(self, marker: bytes = b'\x00\x00\x01\xb7'):
+        """Inject end-of-sequence marker into the last block with video data."""
+        for block in reversed(self.blocks):
+            vid = block.video_data
+            if marker in vid:
+                return  # already has one
+            # Find last nonzero byte
+            last_nz = len(vid) - 1
+            while last_nz > 0 and vid[last_nz] == 0:
+                last_nz -= 1
+            if last_nz > 0 and last_nz + len(marker) + 1 < len(vid):
+                vid = bytearray(vid)
+                vid[last_nz + 1:last_nz + 1 + len(marker)] = marker
+                block.video_data = bytes(vid)
+                return
+
+    def verify_end_of_sequence(self, marker: bytes = b'\x00\x00\x01\xb7') -> bool:
+        """Verify that end-of-sequence marker exists somewhere in the video."""
+        for block in reversed(self.blocks):
+            if marker in block.video_data:
+                return True
+        return False
 
     def frame_count(self, marker: bytes = b'\x00\x00\x01\x00') -> int:
         """Count total video frames across all blocks."""

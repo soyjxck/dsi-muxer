@@ -12,7 +12,7 @@ No DSI muxer existed before this tool. VGMToolbox could demux DSI files but not 
 ## Install
 
 ```bash
-pip install .
+pip install dsi-muxer
 ```
 
 ## Usage

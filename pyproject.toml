@@ -7,14 +7,13 @@ name = "dsi-muxer"
 version = "1.0.0"
 description = "Racjin PS2 DSI container multiplexer/demultiplexer"
 readme = "README.md"
-license = {text = "MIT"}
+license = "MIT"
 requires-python = ">=3.8"
 authors = [{name = "soyjxck"}]
 keywords = ["ps2", "racjin", "dsi", "mpeg2", "muxer", "demuxer", "fullmetal-alchemist"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Topic :: Multimedia :: Video",
-    "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
 ]
 
