@@ -79,7 +79,7 @@ def main():
     p_mux = sub.add_parser('mux', help='Create DSI from video + audio')
     p_mux.add_argument('--video', '-v', required=True, help='Input MPEG-2 video (.m2v)')
     p_mux.add_argument('--audio', '-a', required=True, help='Input PS2 ADPCM audio')
-    p_mux.add_argument('--blocks', '-b', type=int, default=None, help='Number of DSI blocks (auto-calculated if omitted)')
+    p_mux.add_argument('--blocks', '-b', type=int, required=True, help='Number of DSI blocks')
     p_mux.add_argument('--output', '-o', required=True, help='Output DSI file')
 
     p_info = sub.add_parser('info', help='Show DSI file info')

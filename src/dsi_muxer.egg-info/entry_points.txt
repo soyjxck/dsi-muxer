@@ -1,0 +1,2 @@
+[console_scripts]
+dsi-muxer = dsi_muxer.__main__:main

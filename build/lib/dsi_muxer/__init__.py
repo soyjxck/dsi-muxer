@@ -20,5 +20,5 @@ Usage:
 
 from .container import DSI, DSIBlock
 
-__version__ = "1.1.0"
+__version__ = "1.0.0"
 __all__ = ["DSI", "DSIBlock"]

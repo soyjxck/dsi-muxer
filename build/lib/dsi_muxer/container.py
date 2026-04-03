@@ -176,13 +176,10 @@ class DSI:
             block_size = template.block_size
             last_aud, last_vid, last_aud_first = template.last_block_template()
         else:
-            usable = block_size - HEADER_SIZE
             if nblocks is None:
-                # Auto-calculate: enough blocks to hold all video + audio
-                import math
-                total = len(video) + len(audio)
-                nblocks = max(1, math.ceil(total / usable))
+                raise ValueError("Must provide either nblocks or template")
             # Auto-calculate last block from total data
+            usable = block_size - HEADER_SIZE
             last_vid = min(usable - audio_align, len(video) % usable or usable)
             last_aud = audio_align
             last_aud_first = False  # V→A for last block

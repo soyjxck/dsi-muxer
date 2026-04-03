@@ -1,0 +1,112 @@
+Metadata-Version: 2.4
+Name: dsi-muxer
+Version: 1.0.0
+Summary: Racjin PS2 DSI container multiplexer/demultiplexer
+Author: soyjxck
+License-Expression: MIT
+Keywords: ps2,racjin,dsi,mpeg2,muxer,demuxer,fullmetal-alchemist
+Classifier: Development Status :: 4 - Beta
+Classifier: Topic :: Multimedia :: Video
+Classifier: Programming Language :: Python :: 3
+Requires-Python: >=3.8
+Description-Content-Type: text/markdown
+
+# DSI Muxer
+
+Multiplexer/demultiplexer for the Racjin PS2 DSI container format.
+
+DSI is a proprietary streaming container used by [Racjin](http://gdri.smspower.org/wiki/index.php/Racjin) for PS2 cutscenes in games like:
+- Fullmetal Alchemist and the Broken Angel
+- Fullmetal Alchemist 2: Curse of the Crimson Elixir
+- Busin 0: Wizardry Alternative NEO
+
+No DSI muxer existed before this tool. VGMToolbox could demux DSI files but not create them.
+
+## Install
+
+```bash
+pip install dsi-muxer
+```
+
+## Usage
+
+### Command Line
+
+```bash
+# Extract video and audio from a DSI file
+dsi-muxer demux M004.DSI --video M004.m2v --audio M004.adpcm
+
+# Create a new DSI from video + audio
+dsi-muxer mux --video subtitled.m2v --audio jp_audio.adpcm --blocks 307 -o M004_new.DSI
+
+# Show DSI file info
+dsi-muxer info M004.DSI
+```
+
+### Python API
+
+```python
+from dsi_muxer import DSI
+from dsi_muxer.container import ensure_end_of_sequence
+
+# Demux
+dsi = DSI.from_file("M004.DSI")
+video = dsi.extract_video()   # MPEG-2 elementary stream
+audio = dsi.extract_audio()   # PS2 SPU ADPCM
+
+# Mux with proportional audio (for perfect A/V sync)
+video = ensure_end_of_sequence(video)
+new_dsi = DSI.mux(video, audio, nblocks=307)
+new_dsi.to_file("M004_new.DSI")
+
+# Inspect
+for block in new_dsi.block_info():
+    print(f"Block {block['block']}: {block['frames']}f, "
+          f"aud={block['audio_size']}, vid={block['video_size']}")
+```
+
+## How It Works
+
+### The DSI Format
+
+DSI files are divided into fixed **0x40000 byte (256 KB) blocks**. Each block contains:
+- A 32-byte header identifying two streams (audio + video) with type tags and sizes
+- 32 bytes of zero padding
+- Interleaved audio and video data
+
+Audio uses PS2 SPU ADPCM (44100 Hz, stereo, 0x100 interleave). Video is MPEG-2 Main Profile (512x448, 29.97 fps).
+
+### Proportional Audio Muxing
+
+The key to perfect A/V sync in DSI is **proportional audio distribution**:
+
+```
+audio_per_block = frames_in_block * (total_audio / total_frames)
+```
+
+Blocks with more video frames get more audio. This ensures each block's audio duration matches its video duration. The PS2's SPU2 buffer smooths per-block variation.
+
+The video is byte-sliced as a continuous stream — GOPs flow freely across block boundaries, just like the original game files. No per-block re-encoding or extra sequence headers.
+
+### Why This Matters
+
+Unlike Sony's standard PSS format (which has timestamps for A/V sync), DSI has **no timestamps**. Sync is entirely determined by the audio/video ratio per block. Getting this ratio wrong causes audible desync during PS2 playback.
+
+## Format Reference
+
+### Block Header (32 bytes, little-endian)
+
+| Offset | Type   | Field              |
+|--------|--------|--------------------|
+| 0x00   | uint32 | Stream count (always 2) |
+| 0x04   | uint32 | Stream 1 offset (always 64) |
+| 0x08   | int32  | Stream 1 type (-8192=audio, -16384=video) |
+| 0x0C   | uint32 | Stream 1 size |
+| 0x10   | uint32 | Stream 2 offset |
+| 0x14   | int32  | Stream 2 type |
+| 0x18   | uint32 | Stream 2 size |
+| 0x1C   | uint32 | Reserved (always 0) |
+
+## License
+
+MIT
