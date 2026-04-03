@@ -23,7 +23,10 @@ pip install dsi-muxer
 # Extract video and audio from a DSI file
 dsi-muxer demux M004.DSI --video M004.m2v --audio M004.adpcm
 
-# Create a new DSI from video + audio
+# Create a new DSI from video + audio (auto-calculates block count)
+dsi-muxer mux --video subtitled.m2v --audio jp_audio.adpcm -o M004_new.DSI
+
+# Or specify block count manually
 dsi-muxer mux --video subtitled.m2v --audio jp_audio.adpcm --blocks 307 -o M004_new.DSI
 
 # Show DSI file info
@@ -43,7 +46,8 @@ audio = dsi.extract_audio()   # PS2 SPU ADPCM
 
 # Mux with proportional audio (for perfect A/V sync)
 video = ensure_end_of_sequence(video)
-new_dsi = DSI.mux(video, audio, nblocks=307)
+new_dsi = DSI.mux(video, audio)  # auto block count
+# or: DSI.mux(video, audio, nblocks=307)  # explicit
 new_dsi.to_file("M004_new.DSI")
 
 # Inspect
