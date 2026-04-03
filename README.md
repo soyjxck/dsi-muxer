@@ -2,6 +2,8 @@
 
 Multiplexer/demultiplexer for the Racjin PS2 DSI container format.
 
+If this helped you, consider [buying me a coffee](https://ko-fi.com/soyjack)
+
 DSI is a proprietary streaming container used by [Racjin](http://gdri.smspower.org/wiki/index.php/Racjin) for PS2 cutscenes in games like:
 - Fullmetal Alchemist and the Broken Angel
 - Fullmetal Alchemist 2: Curse of the Crimson Elixir
