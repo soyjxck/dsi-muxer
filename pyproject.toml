@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "dsi-muxer"
-version = "1.1.0"
+version = "1.1.1"
 description = "Racjin PS2 DSI container multiplexer/demultiplexer"
 readme = "README.md"
 license = "MIT"
