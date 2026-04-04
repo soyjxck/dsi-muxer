@@ -17,6 +17,9 @@ classifiers = [
     "Programming Language :: Python :: 3",
 ]
 
+[project.optional-dependencies]
+dev = ["pytest>=7.0"]
+
 [project.scripts]
 dsi-muxer = "dsi_muxer.__main__:main"
 

@@ -174,20 +174,14 @@ class DSI:
         if template is not None:
             nblocks = template.num_blocks
             block_size = template.block_size
-            last_aud, last_vid, last_aud_first = template.last_block_template()
-        else:
-            usable = block_size - HEADER_SIZE
-            if nblocks is None:
-                # Auto-calculate: enough blocks to hold all video + audio
-                import math
-                total = len(video) + len(audio)
-                nblocks = max(1, math.ceil(total / usable))
-            # Auto-calculate last block from total data
-            last_vid = min(usable - audio_align, len(video) % usable or usable)
-            last_aud = audio_align
-            last_aud_first = False  # V→A for last block
 
         usable = block_size - HEADER_SIZE
+
+        if nblocks is None:
+            import math
+            total = len(video) + len(audio)
+            nblocks = max(1, math.ceil(total / usable))
+
         total_frames = _count_markers(video, video_frame_marker)
         if total_frames == 0:
             raise ValueError(f"No video frames found (marker: {video_frame_marker.hex()})")
@@ -205,28 +199,55 @@ class DSI:
         aud_pos = 0
 
         for blk in range(nblocks):
+            vid_remaining = len(video) - vid_pos
+            aud_remaining = len(audio) - aud_pos
+
+            if vid_remaining <= 0 and aud_remaining <= 0:
+                break
+
+            # When video is exhausted, pack remaining audio into the last block
+            if vid_remaining <= 0 and blocks:
+                last_blk = blocks[-1]
+                leftover = audio[aud_pos:]
+                new_aud = last_blk.audio_data + leftover
+                pad = (audio_align - (len(new_aud) % audio_align)) % audio_align
+                if pad:
+                    new_aud += b'\x00' * pad
+                new_vid_sz = usable - len(new_aud)
+                if new_vid_sz >= 0:
+                    old_vid = last_blk.video_data[:new_vid_sz]
+                    if len(old_vid) < new_vid_sz:
+                        old_vid += b'\x00' * (new_vid_sz - len(old_vid))
+                    blocks[-1] = DSIBlock(
+                        audio_data=new_aud,
+                        video_data=old_vid,
+                        audio_first=len(new_aud) >= new_vid_sz,
+                    )
+                aud_pos = len(audio)
+                break
+
             is_last = (blk == nblocks - 1)
 
             if is_last:
-                aud_sz = last_aud
-                vid_cap = last_vid
-                aud_first = last_aud_first
+                # Last block: allocate all remaining audio, rest to video
+                aud_sz = max(audio_align,
+                             ((aud_remaining + audio_align - 1) // audio_align) * audio_align)
+                aud_sz = min(aud_sz, usable - audio_align)
+                vid_cap = usable - aud_sz
             else:
-                # Estimate frames to calculate proportional audio
+                # Proportional audio based on frame count
                 est_aud = max(audio_align,
                               (round(est_frames_per_block * audio_per_frame)
                                // audio_align) * audio_align)
                 est_vid_cap = usable - est_aud
-                chunk = video[vid_pos:vid_pos + est_vid_cap] if vid_pos < len(video) else b''
+                chunk = video[vid_pos:vid_pos + est_vid_cap]
                 actual_frames = _count_markers(chunk, video_frame_marker)
                 aud_sz = max(audio_align,
                              (round(actual_frames * audio_per_frame)
                               // audio_align) * audio_align)
                 vid_cap = usable - aud_sz
-                aud_first = True
 
-            # Byte-slice video
-            vc = video[vid_pos:vid_pos + vid_cap] if vid_pos < len(video) else b''
+            vc = video[vid_pos:vid_pos + vid_cap]
             if len(vc) < vid_cap:
                 vc += b'\x00' * (vid_cap - len(vc))
 
@@ -237,7 +258,7 @@ class DSI:
             blocks.append(DSIBlock(
                 audio_data=ac,
                 video_data=vc,
-                audio_first=aud_first,
+                audio_first=True,
             ))
 
             vid_pos += vid_cap
