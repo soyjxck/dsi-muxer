@@ -7,4 +7,6 @@ src/dsi_muxer.egg-info/PKG-INFO
 src/dsi_muxer.egg-info/SOURCES.txt
 src/dsi_muxer.egg-info/dependency_links.txt
 src/dsi_muxer.egg-info/entry_points.txt
+src/dsi_muxer.egg-info/requires.txt
 src/dsi_muxer.egg-info/top_level.txt
+tests/test_mux.py

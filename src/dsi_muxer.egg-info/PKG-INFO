@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: dsi-muxer
-Version: 1.1.1
+Version: 1.2.0
 Summary: Racjin PS2 DSI container multiplexer/demultiplexer
 Author: soyjxck
 License-Expression: MIT
@@ -10,10 +10,14 @@ Classifier: Topic :: Multimedia :: Video
 Classifier: Programming Language :: Python :: 3
 Requires-Python: >=3.8
 Description-Content-Type: text/markdown
+Provides-Extra: dev
+Requires-Dist: pytest>=7.0; extra == "dev"
 
 # DSI Muxer
 
 Multiplexer/demultiplexer for the Racjin PS2 DSI container format.
+
+If this helped you, consider [buying me a coffee](https://ko-fi.com/soyjack)
 
 DSI is a proprietary streaming container used by [Racjin](http://gdri.smspower.org/wiki/index.php/Racjin) for PS2 cutscenes in games like:
 - Fullmetal Alchemist and the Broken Angel

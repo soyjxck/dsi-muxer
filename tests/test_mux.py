@@ -282,3 +282,63 @@ class TestBlockSerialization:
         assert parsed.audio_data == blk.audio_data
         assert parsed.video_data == blk.video_data
         assert parsed.audio_first is False
+
+
+# ---------------------------------------------------------------------------
+# Video replacement
+# ---------------------------------------------------------------------------
+
+class TestReplaceVideo:
+    """replace_video must preserve block structure and only change video."""
+
+    def test_preserves_audio(self):
+        video = _make_video(50)
+        audio = _make_audio(25600)
+        dsi = DSI.mux(video, audio)
+        new_video = _make_video(50, bytes_per_frame=3500)
+        replaced = dsi.replace_video(new_video)
+        assert replaced.extract_audio() == dsi.extract_audio()
+
+    def test_preserves_block_count(self):
+        video = _make_video(50)
+        audio = _make_audio(25600)
+        dsi = DSI.mux(video, audio)
+        new_video = _make_video(50, bytes_per_frame=3500)
+        replaced = dsi.replace_video(new_video)
+        assert replaced.num_blocks == dsi.num_blocks
+
+    def test_preserves_audio_sizes(self):
+        video = _make_video(50)
+        audio = _make_audio(25600)
+        dsi = DSI.mux(video, audio)
+        new_video = _make_video(50, bytes_per_frame=3500)
+        replaced = dsi.replace_video(new_video)
+        for orig, repl in zip(dsi.blocks, replaced.blocks):
+            assert repl.audio_size == orig.audio_size
+
+    def test_preserves_stream_order(self):
+        video = _make_video(50)
+        audio = _make_audio(25600)
+        dsi = DSI.mux(video, audio)
+        new_video = _make_video(50, bytes_per_frame=3500)
+        replaced = dsi.replace_video(new_video)
+        for orig, repl in zip(dsi.blocks, replaced.blocks):
+            assert repl.audio_first == orig.audio_first
+
+    def test_video_content_replaced(self):
+        video = _make_video(50)
+        audio = _make_audio(25600)
+        dsi = DSI.mux(video, audio)
+        new_video = _make_video(50, bytes_per_frame=3500)
+        replaced = dsi.replace_video(new_video)
+        assert replaced.extract_video() != dsi.extract_video()
+
+    def test_shorter_video_zero_padded(self):
+        video = _make_video(50)
+        audio = _make_audio(25600)
+        dsi = DSI.mux(video, audio)
+        short_video = _make_video(20)
+        replaced = dsi.replace_video(short_video)
+        # Block sizes preserved even with shorter video
+        for orig, repl in zip(dsi.blocks, replaced.blocks):
+            assert repl.video_size == orig.video_size

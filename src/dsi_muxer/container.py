@@ -268,6 +268,37 @@ class DSI:
         dsi.ensure_end_of_sequence()
         return dsi
 
+    def replace_video(self, new_video: bytes) -> 'DSI':
+        """Replace video content while preserving the exact block structure.
+
+        Splices new video bytes into each block's video region. Headers,
+        audio data, stream order, and padding are untouched. This is the
+        safest way to swap video (e.g. with burned subtitles) without
+        disturbing the block layout that hardware decoders expect.
+
+        Args:
+            new_video: Replacement video elementary stream.
+
+        Returns:
+            New DSI instance with replaced video.
+        """
+        new_blocks = []
+        vid_pos = 0
+        for block in self.blocks:
+            vid_sz = block.video_size
+            chunk = new_video[vid_pos:vid_pos + vid_sz]
+            if len(chunk) < vid_sz:
+                chunk += b'\x00' * (vid_sz - len(chunk))
+            new_blocks.append(DSIBlock(
+                audio_data=block.audio_data,
+                video_data=chunk,
+                audio_first=block.audio_first,
+            ))
+            vid_pos += vid_sz
+        result = DSI(new_blocks, self.block_size)
+        result.ensure_end_of_sequence()
+        return result
+
     def ensure_end_of_sequence(self, marker: bytes = b'\x00\x00\x01\xb7'):
         """Inject end-of-sequence marker into the last block with video data."""
         for block in reversed(self.blocks):
