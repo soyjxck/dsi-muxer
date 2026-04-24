@@ -153,20 +153,23 @@ class DSI:
             ) -> 'DSI':
         """Mux video + audio into DSI with proportional audio distribution.
 
-        The video is byte-sliced across blocks as a continuous stream.
-        Audio per block is proportional to the number of video frames
-        in that block, ensuring A/V sync on playback.
+        Block layout matches Racjin's DSI convention: audio-first, fixed
+        video cap per block (zero-padded if video is short for the cap),
+        block count derived from total content size.
+
+        Audio is distributed proportionally to the fraction of the video
+        stream consumed by each block, using cumulative-target tracking to
+        prevent drift. No trailing audio dump — the full audio stream is
+        spread across all blocks so no block ever gets a spike of leftover.
 
         Args:
             video: Video elementary stream (e.g. MPEG-2 .m2v)
             audio: Audio stream (e.g. PS2 SPU ADPCM)
-            nblocks: Number of blocks (required if no template)
-            template: Optional existing DSI to copy structure from
-                      (block count, last block sizes, block size)
+            nblocks: Explicit block count (auto-sized from content if None)
+            template: Optional existing DSI to copy block_size + nblocks from
             block_size: Block size in bytes (default 0x40000)
             audio_align: Audio size alignment in bytes (default 512)
-            video_frame_marker: Byte sequence marking frame starts
-                                (default: MPEG-2 picture start code)
+            video_frame_marker: Frame start marker (unused here, kept for API)
 
         Returns:
             New DSI instance
@@ -182,18 +185,6 @@ class DSI:
             total = len(video) + len(audio)
             nblocks = max(1, math.ceil(total / usable))
 
-        total_frames = _count_markers(video, video_frame_marker)
-        if total_frames == 0:
-            raise ValueError(f"No video frames found (marker: {video_frame_marker.hex()})")
-
-        audio_per_frame = len(audio) / total_frames
-
-        # Estimate typical frames per block for initial audio calculation
-        avg_audio = max(audio_align,
-                        (round(len(audio) / nblocks) // audio_align) * audio_align)
-        avg_vid_cap = usable - avg_audio
-        est_frames_per_block = max(1, avg_vid_cap // (len(video) // total_frames))
-
         blocks = []
         vid_pos = 0
         aud_pos = 0
@@ -201,55 +192,64 @@ class DSI:
         for blk in range(nblocks):
             vid_remaining = len(video) - vid_pos
             aud_remaining = len(audio) - aud_pos
-
             if vid_remaining <= 0 and aud_remaining <= 0:
                 break
 
-            # When video is exhausted, pack remaining audio into the last block
-            if vid_remaining <= 0 and blocks:
-                last_blk = blocks[-1]
-                leftover = audio[aud_pos:]
-                new_aud = last_blk.audio_data + leftover
-                pad = (audio_align - (len(new_aud) % audio_align)) % audio_align
-                if pad:
-                    new_aud += b'\x00' * pad
-                new_vid_sz = usable - len(new_aud)
-                if new_vid_sz >= 0:
-                    old_vid = last_blk.video_data[:new_vid_sz]
-                    if len(old_vid) < new_vid_sz:
-                        old_vid += b'\x00' * (new_vid_sz - len(old_vid))
-                    blocks[-1] = DSIBlock(
-                        audio_data=new_aud,
-                        video_data=old_vid,
-                        audio_first=len(new_aud) >= new_vid_sz,
-                    )
-                aud_pos = len(audio)
+            # If video is done, fold remaining audio into the last video block
+            # up to its headroom, then emit audio-only trailing block(s) for
+            # any remainder. Avoids the old muxer's single-block audio spike.
+            if vid_remaining <= 0 and aud_remaining > 0:
+                if blocks:
+                    last = blocks[-1]
+                    headroom = usable - last.audio_size - last.video_size
+                    take = min(aud_remaining,
+                               (headroom // audio_align) * audio_align)
+                    if take > 0:
+                        new_aud = last.audio_data + audio[aud_pos:aud_pos + take]
+                        blocks[-1] = DSIBlock(
+                            audio_data=new_aud,
+                            video_data=last.video_data,
+                            audio_first=last.audio_first,
+                        )
+                        aud_pos += take
+                        aud_remaining -= take
+                while aud_remaining > 0:
+                    aud_sz = min(aud_remaining,
+                                 ((usable - audio_align) // audio_align) * audio_align)
+                    aud_sz = ((aud_sz + audio_align - 1) // audio_align) * audio_align
+                    aud_sz = min(aud_sz, aud_remaining)
+                    blocks.append(DSIBlock(
+                        audio_data=audio[aud_pos:aud_pos + aud_sz],
+                        video_data=b'',
+                        audio_first=True,
+                    ))
+                    aud_pos += aud_sz
+                    aud_remaining -= aud_sz
                 break
-
             is_last = (blk == nblocks - 1)
 
-            if is_last:
-                # Last block: allocate all remaining audio, rest to video
-                aud_sz = max(audio_align,
-                             ((aud_remaining + audio_align - 1) // audio_align) * audio_align)
-                aud_sz = min(aud_sz, usable - audio_align)
-                vid_cap = usable - aud_sz
-            else:
-                # Proportional audio based on frame count
-                est_aud = max(audio_align,
-                              (round(est_frames_per_block * audio_per_frame)
-                               // audio_align) * audio_align)
-                est_vid_cap = usable - est_aud
-                chunk = video[vid_pos:vid_pos + est_vid_cap]
-                actual_frames = _count_markers(chunk, video_frame_marker)
-                aud_sz = max(audio_align,
-                             (round(actual_frames * audio_per_frame)
-                              // audio_align) * audio_align)
-                vid_cap = usable - aud_sz
+            # Cumulative-target audio: what should aud_pos be at end of this block?
+            # Distribute proportional to total block progress so drift stays bounded
+            # and no leftover dumps into the final block.
+            target_frac = (blk + 1) / nblocks
+            target_aud_end = round(target_frac * len(audio))
+            want_aud = target_aud_end - aud_pos
 
+            # Round to nearest align
+            aud_sz = ((want_aud + audio_align // 2) // audio_align) * audio_align
+            aud_sz = max(audio_align, aud_sz)
+            aud_sz = min(aud_sz, aud_remaining)
+            aud_sz = min(aud_sz, usable - audio_align)
+
+            # On the last block, take all remaining audio (in case of rounding drift)
+            if is_last and aud_remaining > 0:
+                need = ((aud_remaining + audio_align - 1) // audio_align) * audio_align
+                aud_sz = max(aud_sz, min(need, usable - audio_align))
+
+            # Video cap fills the rest of the block
+            vid_cap = usable - aud_sz
+            vid_cap = min(vid_cap, vid_remaining) if vid_remaining > 0 else 0
             vc = video[vid_pos:vid_pos + vid_cap]
-            if len(vc) < vid_cap:
-                vc += b'\x00' * (vid_cap - len(vc))
 
             ac = audio[aud_pos:aud_pos + aud_sz]
             if len(ac) < aud_sz:
@@ -299,21 +299,57 @@ class DSI:
         result.ensure_end_of_sequence()
         return result
 
-    def ensure_end_of_sequence(self, marker: bytes = b'\x00\x00\x01\xb7'):
-        """Inject end-of-sequence marker into the last block with video data."""
+    def ensure_end_of_sequence(self, marker: bytes = b'\x00\x00\x01\xb7',
+                               trailing_pad: int = 256):
+        """Ensure the video stream ends with the marker + stuffing bytes.
+
+        The PS2 IPU (MPEG-2 decoder) needs stuffing bytes after the
+        end-of-sequence marker to flush its pipeline; without them, the
+        decoder stalls and the cutscene freezes on its final frame.
+        Original Racjin DSI outputs include ~171 such bytes; we default
+        to 256 zero bytes of padding to be safe.
+
+        Args:
+            marker: MPEG-2 end-of-sequence marker (default 0x000001B7).
+            trailing_pad: Number of zero bytes that must follow the marker
+                          within the last block's video region. Capped by
+                          available block headroom.
+        """
+        usable = self.block_size - HEADER_SIZE
         for block in reversed(self.blocks):
             vid = block.video_data
-            if marker in vid:
-                return  # already has one
-            # Find last nonzero byte
-            last_nz = len(vid) - 1
-            while last_nz > 0 and vid[last_nz] == 0:
-                last_nz -= 1
-            if last_nz > 0 and last_nz + len(marker) + 1 < len(vid):
-                vid = bytearray(vid)
-                vid[last_nz + 1:last_nz + 1 + len(marker)] = marker
-                block.video_data = bytes(vid)
-                return
+            if len(vid) == 0:
+                continue
+
+            idx = vid.rfind(marker) if isinstance(vid, (bytes, bytearray)) else -1
+
+            if idx < 0:
+                # Marker missing — overwrite trailing zeros with marker, or append
+                last_nz = len(vid) - 1
+                while last_nz > 0 and vid[last_nz] == 0:
+                    last_nz -= 1
+                if last_nz > 0 and last_nz + len(marker) + 1 < len(vid):
+                    new_vid = bytearray(vid)
+                    new_vid[last_nz + 1:last_nz + 1 + len(marker)] = marker
+                    idx = last_nz + 1
+                    vid = bytes(new_vid)
+                elif block.audio_size + block.video_size + len(marker) <= usable:
+                    vid = vid + marker
+                    idx = len(vid) - len(marker)
+                else:
+                    continue  # no room — try previous block
+
+            # Marker is at idx; ensure trailing_pad zero bytes follow it within
+            # the video region. Extend video_data if needed (within headroom).
+            trailing = len(vid) - (idx + len(marker))
+            if trailing < trailing_pad:
+                need = trailing_pad - trailing
+                headroom = usable - block.audio_size - len(vid)
+                add = min(need, headroom)
+                if add > 0:
+                    vid = vid + b'\x00' * add
+            block.video_data = bytes(vid)
+            return
 
     def verify_end_of_sequence(self, marker: bytes = b'\x00\x00\x01\xb7') -> bool:
         """Verify that end-of-sequence marker exists somewhere in the video."""
