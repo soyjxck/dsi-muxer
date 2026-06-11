@@ -12,12 +12,12 @@ Usage:
     python -m dsi_muxer info input.dsi
 """
 
-import sys
 import argparse
+
 from .container import DSI, ensure_end_of_sequence
 
 
-def cmd_demux(args):
+def cmd_demux(args: argparse.Namespace) -> None:
     dsi = DSI.from_file(args.input)
     if args.video:
         with open(args.video, 'wb') as f:
@@ -29,7 +29,7 @@ def cmd_demux(args):
         print(f"Audio: {args.audio}")
 
 
-def cmd_mux(args):
+def cmd_mux(args: argparse.Namespace) -> None:
     with open(args.video, 'rb') as f:
         video = f.read()
     with open(args.audio, 'rb') as f:
@@ -43,7 +43,7 @@ def cmd_mux(args):
     print(f"Muxed: {frames} frames, {args.blocks} blocks -> {args.output}")
 
 
-def cmd_info(args):
+def cmd_info(args: argparse.Namespace) -> None:
     dsi = DSI.from_file(args.input)
     video = dsi.extract_video()
     audio = dsi.extract_audio()
@@ -59,15 +59,17 @@ def cmd_info(args):
     print("-" * 40)
     for b in info[:10]:
         order = "A→V" if b['audio_first'] else "V→A"
-        print(f"{b['block']:5d} {b['frames']:7d} {b['audio_size']:8,} {b['video_size']:8,} {order:>5}")
+        print(f"{b['block']:5d} {b['frames']:7d} {b['audio_size']:8,} "
+              f"{b['video_size']:8,} {order:>5}")
     if len(info) > 20:
         print(f"  ... ({len(info) - 20} blocks omitted)")
     for b in info[-10:]:
         order = "A→V" if b['audio_first'] else "V→A"
-        print(f"{b['block']:5d} {b['frames']:7d} {b['audio_size']:8,} {b['video_size']:8,} {order:>5}")
+        print(f"{b['block']:5d} {b['frames']:7d} {b['audio_size']:8,} "
+              f"{b['video_size']:8,} {order:>5}")
 
 
-def main():
+def main() -> None:
     parser = argparse.ArgumentParser(description="Racjin PS2 DSI container tool")
     sub = parser.add_subparsers(dest='command')
 
@@ -79,7 +81,8 @@ def main():
     p_mux = sub.add_parser('mux', help='Create DSI from video + audio')
     p_mux.add_argument('--video', '-v', required=True, help='Input MPEG-2 video (.m2v)')
     p_mux.add_argument('--audio', '-a', required=True, help='Input PS2 ADPCM audio')
-    p_mux.add_argument('--blocks', '-b', type=int, default=None, help='Number of DSI blocks (auto-calculated if omitted)')
+    p_mux.add_argument('--blocks', '-b', type=int, default=None,
+                       help='Number of DSI blocks (auto-calculated if omitted)')
     p_mux.add_argument('--output', '-o', required=True, help='Output DSI file')
 
     p_info = sub.add_parser('info', help='Show DSI file info')

@@ -1,9 +1,7 @@
 """Tests for DSI muxing — verifies audio/video integrity with and without nblocks."""
 
-import pytest
 from dsi_muxer import DSI
-from dsi_muxer.container import DSIBlock, _count_markers, HEADER_SIZE, DEFAULT_BLOCK_SIZE
-
+from dsi_muxer.container import DEFAULT_BLOCK_SIZE, HEADER_SIZE, DSIBlock
 
 # ---------------------------------------------------------------------------
 # Helpers to build synthetic MPEG-2-like video and PS2 ADPCM-like audio
@@ -35,21 +33,21 @@ def _make_audio(n_bytes: int, align: int = 512) -> bytes:
 class TestNoAudioLoss:
     """Muxing must never drop audio bytes."""
 
-    def test_auto_blocks_preserves_all_audio(self):
+    def test_auto_blocks_preserves_all_audio(self) -> None:
         video = _make_video(100)
         audio = _make_audio(51200)
         dsi = DSI.mux(video, audio)
         extracted = dsi.extract_audio()
         assert extracted[:len(audio)] == audio
 
-    def test_explicit_blocks_preserves_all_audio(self):
+    def test_explicit_blocks_preserves_all_audio(self) -> None:
         video = _make_video(100)
         audio = _make_audio(51200)
         dsi = DSI.mux(video, audio, nblocks=5)
         extracted = dsi.extract_audio()
         assert extracted[:len(audio)] == audio
 
-    def test_audio_longer_than_video_preserved(self):
+    def test_audio_longer_than_video_preserved(self) -> None:
         """Audio is intentionally longer than video (like FMA1 DSI format)."""
         video = _make_video(50, bytes_per_frame=2000)  # ~100KB video
         audio = _make_audio(102400)  # 100KB audio — roughly equal
@@ -58,7 +56,7 @@ class TestNoAudioLoss:
         assert len(extracted) >= len(audio)
         assert extracted[:len(audio)] == audio
 
-    def test_large_audio_excess_preserved(self):
+    def test_large_audio_excess_preserved(self) -> None:
         """Audio 50% longer than video — no truncation."""
         video = _make_video(30, bytes_per_frame=5000)  # 150KB
         audio = _make_audio(153600)  # 150KB audio
@@ -74,19 +72,19 @@ class TestNoAudioLoss:
 class TestNoVideoLoss:
     """Muxing must preserve all video frames."""
 
-    def test_auto_blocks_preserves_frame_count(self):
+    def test_auto_blocks_preserves_frame_count(self) -> None:
         video = _make_video(200)
         audio = _make_audio(51200)
         dsi = DSI.mux(video, audio)
         assert dsi.frame_count() == 200
 
-    def test_explicit_blocks_preserves_frame_count(self):
+    def test_explicit_blocks_preserves_frame_count(self) -> None:
         video = _make_video(200)
         audio = _make_audio(51200)
         dsi = DSI.mux(video, audio, nblocks=10)
         assert dsi.frame_count() == 200
 
-    def test_video_bytes_preserved(self):
+    def test_video_bytes_preserved(self) -> None:
         video = _make_video(50)
         audio = _make_audio(25600)
         dsi = DSI.mux(video, audio)
@@ -102,7 +100,7 @@ class TestNoVideoLoss:
 class TestNoEmptyVideoBlocks:
     """The last block must contain real video data (no black screen)."""
 
-    def test_auto_blocks_no_empty_trailing_blocks(self):
+    def test_auto_blocks_no_empty_trailing_blocks(self) -> None:
         video = _make_video(100)
         audio = _make_audio(102400)  # generous audio
         dsi = DSI.mux(video, audio)
@@ -110,7 +108,7 @@ class TestNoEmptyVideoBlocks:
         # Last block should have nonzero video
         assert any(b != 0 for b in last.video_data), "Last block has zero video"
 
-    def test_explicit_blocks_last_has_video(self):
+    def test_explicit_blocks_last_has_video(self) -> None:
         video = _make_video(100)
         audio = _make_audio(51200)
         dsi = DSI.mux(video, audio, nblocks=5)
@@ -134,7 +132,7 @@ class TestNoEmptyVideoBlocks:
 class TestBlockCount:
     """Verify block count behavior."""
 
-    def test_auto_creates_enough_blocks(self):
+    def test_auto_creates_enough_blocks(self) -> None:
         video = _make_video(500, bytes_per_frame=8000)  # ~4MB video
         audio = _make_audio(512000)  # 500KB audio
         dsi = DSI.mux(video, audio)
@@ -143,14 +141,14 @@ class TestBlockCount:
         min_blocks = total_content // usable  # at least this many
         assert dsi.num_blocks >= min_blocks
 
-    def test_explicit_blocks_honored(self):
+    def test_explicit_blocks_honored(self) -> None:
         video = _make_video(100)
         audio = _make_audio(51200)
         dsi = DSI.mux(video, audio, nblocks=20)
         # May be fewer if content runs out, but no more
         assert dsi.num_blocks <= 20
 
-    def test_single_block(self):
+    def test_single_block(self) -> None:
         video = _make_video(5, bytes_per_frame=1000)
         audio = _make_audio(512)
         dsi = DSI.mux(video, audio, nblocks=1)
@@ -165,7 +163,7 @@ class TestBlockCount:
 class TestTemplateMux:
     """Template muxing should use the template's block count."""
 
-    def test_template_block_count_used(self):
+    def test_template_block_count_used(self) -> None:
         video = _make_video(100)
         audio = _make_audio(51200)
         template = DSI.mux(video, audio, nblocks=8)
@@ -174,7 +172,7 @@ class TestTemplateMux:
         remuxed = DSI.mux(new_video, audio, template=template)
         assert remuxed.num_blocks <= template.num_blocks
 
-    def test_template_preserves_audio(self):
+    def test_template_preserves_audio(self) -> None:
         video = _make_video(100)
         audio = _make_audio(51200)
         template = DSI.mux(video, audio, nblocks=8)
@@ -191,7 +189,7 @@ class TestTemplateMux:
 class TestRoundTrip:
     """Mux → to_bytes → from_bytes → extract should preserve content."""
 
-    def test_roundtrip_auto(self):
+    def test_roundtrip_auto(self) -> None:
         video = _make_video(50)
         audio = _make_audio(25600)
 
@@ -203,7 +201,7 @@ class TestRoundTrip:
         assert parsed.extract_audio() == dsi.extract_audio()
         assert parsed.extract_video() == dsi.extract_video()
 
-    def test_roundtrip_explicit(self):
+    def test_roundtrip_explicit(self) -> None:
         video = _make_video(50)
         audio = _make_audio(25600)
 
@@ -223,13 +221,13 @@ class TestRoundTrip:
 class TestEndOfSequence:
     """EOS marker must be present after muxing."""
 
-    def test_eos_injected(self):
+    def test_eos_injected(self) -> None:
         video = _make_video(50)
         audio = _make_audio(25600)
         dsi = DSI.mux(video, audio)
         assert dsi.verify_end_of_sequence()
 
-    def test_eos_already_present_not_duplicated(self):
+    def test_eos_already_present_not_duplicated(self) -> None:
         video = _make_video(50) + b'\x00\x00\x01\xb7'
         audio = _make_audio(25600)
         dsi = DSI.mux(video, audio)
@@ -245,14 +243,14 @@ class TestEndOfSequence:
 class TestAudioAlignment:
     """Audio sizes per block must be aligned."""
 
-    def test_default_alignment_512(self):
+    def test_default_alignment_512(self) -> None:
         video = _make_video(100)
         audio = _make_audio(51200)
         dsi = DSI.mux(video, audio)
         for blk in dsi.blocks:
             assert blk.audio_size % 512 == 0
 
-    def test_custom_alignment(self):
+    def test_custom_alignment(self) -> None:
         video = _make_video(100)
         audio = _make_audio(51200)
         dsi = DSI.mux(video, audio, audio_align=1024)
@@ -267,7 +265,7 @@ class TestAudioAlignment:
 class TestBlockSerialization:
     """DSIBlock to_bytes/from_bytes round-trip."""
 
-    def test_audio_first(self):
+    def test_audio_first(self) -> None:
         blk = DSIBlock(audio_data=b'\xAA' * 512, video_data=b'\xBB' * 1024, audio_first=True)
         raw = blk.to_bytes()
         parsed = DSIBlock.from_bytes(raw)
@@ -275,7 +273,7 @@ class TestBlockSerialization:
         assert parsed.video_data == blk.video_data
         assert parsed.audio_first is True
 
-    def test_video_first(self):
+    def test_video_first(self) -> None:
         blk = DSIBlock(audio_data=b'\xAA' * 512, video_data=b'\xBB' * 1024, audio_first=False)
         raw = blk.to_bytes()
         parsed = DSIBlock.from_bytes(raw)
@@ -291,7 +289,7 @@ class TestBlockSerialization:
 class TestReplaceVideo:
     """replace_video must preserve block structure and only change video."""
 
-    def test_preserves_audio(self):
+    def test_preserves_audio(self) -> None:
         video = _make_video(50)
         audio = _make_audio(25600)
         dsi = DSI.mux(video, audio)
@@ -299,7 +297,7 @@ class TestReplaceVideo:
         replaced = dsi.replace_video(new_video)
         assert replaced.extract_audio() == dsi.extract_audio()
 
-    def test_preserves_block_count(self):
+    def test_preserves_block_count(self) -> None:
         video = _make_video(50)
         audio = _make_audio(25600)
         dsi = DSI.mux(video, audio)
@@ -307,7 +305,7 @@ class TestReplaceVideo:
         replaced = dsi.replace_video(new_video)
         assert replaced.num_blocks == dsi.num_blocks
 
-    def test_preserves_audio_sizes(self):
+    def test_preserves_audio_sizes(self) -> None:
         video = _make_video(50)
         audio = _make_audio(25600)
         dsi = DSI.mux(video, audio)
@@ -316,7 +314,7 @@ class TestReplaceVideo:
         for orig, repl in zip(dsi.blocks, replaced.blocks):
             assert repl.audio_size == orig.audio_size
 
-    def test_preserves_stream_order(self):
+    def test_preserves_stream_order(self) -> None:
         video = _make_video(50)
         audio = _make_audio(25600)
         dsi = DSI.mux(video, audio)
@@ -325,7 +323,7 @@ class TestReplaceVideo:
         for orig, repl in zip(dsi.blocks, replaced.blocks):
             assert repl.audio_first == orig.audio_first
 
-    def test_video_content_replaced(self):
+    def test_video_content_replaced(self) -> None:
         video = _make_video(50)
         audio = _make_audio(25600)
         dsi = DSI.mux(video, audio)
@@ -333,7 +331,7 @@ class TestReplaceVideo:
         replaced = dsi.replace_video(new_video)
         assert replaced.extract_video() != dsi.extract_video()
 
-    def test_shorter_video_zero_padded(self):
+    def test_shorter_video_zero_padded(self) -> None:
         video = _make_video(50)
         audio = _make_audio(25600)
         dsi = DSI.mux(video, audio)

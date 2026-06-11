@@ -19,8 +19,8 @@ Header fields:
 """
 
 import struct
-from dataclasses import dataclass, field
-from typing import List, Optional, Tuple
+from dataclasses import dataclass
+from typing import List, Optional, Tuple, TypedDict
 
 # Defaults (matching FMA / Racjin games)
 DEFAULT_BLOCK_SIZE = 0x40000
@@ -28,6 +28,14 @@ HEADER_SIZE = 64
 AUDIO_TAG = -8192
 VIDEO_TAG = -16384
 DEFAULT_AUDIO_ALIGN = 512  # PS2 ADPCM stereo interleave pair
+
+
+class BlockInfo(TypedDict):
+    block: int
+    audio_size: int
+    video_size: int
+    frames: int
+    audio_first: bool
 
 
 @dataclass
@@ -117,7 +125,7 @@ class DSI:
         """Serialize all blocks to raw bytes."""
         return b''.join(block.to_bytes(self.block_size) for block in self.blocks)
 
-    def to_file(self, path: str):
+    def to_file(self, path: str) -> None:
         """Write DSI to disk."""
         with open(path, 'wb') as f:
             f.write(self.to_bytes())
@@ -185,7 +193,7 @@ class DSI:
             total = len(video) + len(audio)
             nblocks = max(1, math.ceil(total / usable))
 
-        blocks = []
+        blocks: List[DSIBlock] = []
         vid_pos = 0
         aud_pos = 0
 
@@ -300,7 +308,7 @@ class DSI:
         return result
 
     def ensure_end_of_sequence(self, marker: bytes = b'\x00\x00\x01\xb7',
-                               trailing_pad: int = 256):
+                               trailing_pad: int = 256) -> None:
         """Ensure the video stream ends with the marker + stuffing bytes.
 
         The PS2 IPU (MPEG-2 decoder) needs stuffing bytes after the
@@ -362,9 +370,9 @@ class DSI:
         """Count total video frames across all blocks."""
         return _count_markers(self.extract_video(), marker)
 
-    def block_info(self, marker: bytes = b'\x00\x00\x01\x00') -> List[dict]:
+    def block_info(self, marker: bytes = b'\x00\x00\x01\x00') -> List[BlockInfo]:
         """Get per-block info."""
-        info = []
+        info: List[BlockInfo] = []
         for i, block in enumerate(self.blocks):
             info.append({
                 'block': i,
